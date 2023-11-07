@@ -1,31 +1,21 @@
-package com.example.getlatlonwithoutinternet;
-
-import androidx.annotation.NonNull;
-import androidx.appcompat.app.AppCompatActivity;
-import androidx.core.app.ActivityCompat;
-
-
 import android.Manifest;
-import android.annotation.SuppressLint;
 import android.content.ContentValues;
-import android.content.Context;
-import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.database.sqlite.SQLiteDatabase;
 import android.location.Location;
-import android.location.LocationListener;
-import android.location.LocationManager;
 import android.os.Bundle;
 import android.os.Handler;
-import android.os.Looper;
-import android.provider.Settings;
 import android.util.Log;
 import android.view.View;
 import android.widget.Button;
 import android.widget.ListView;
 import android.widget.TextView;
 import android.widget.Toast;
-
+import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
+import androidx.appcompat.app.AppCompatActivity;
+import androidx.core.app.ActivityCompat;
+import androidx.core.content.ContextCompat;
 import com.google.android.gms.location.FusedLocationProviderClient;
 import com.google.android.gms.location.LocationCallback;
 import com.google.android.gms.location.LocationRequest;
@@ -34,23 +24,17 @@ import com.google.android.gms.location.LocationServices;
 import com.google.android.gms.tasks.OnCompleteListener;
 import com.google.android.gms.tasks.Task;
 
-import java.text.SimpleDateFormat;
-import java.util.Date;
-import java.util.List;
-import java.util.Locale;
-
 public class MainActivity extends AppCompatActivity {
-
-    FusedLocationProviderClient mFusedLocationClient;
-
-    TextView latitudeTextView, longitTextView;
+    private FusedLocationProviderClient mFusedLocationClient;
+    private TextView latitudeTextView, longitTextView;
     private static final int LOCATION_PERMISSION_REQUEST_CODE = 101;
     private LocationDatabaseHelper dbHelper;
-    private LocationDataAdapter locationDataAdapter;
-
     private Handler handler = new Handler();
+    private Button refreshClick;
 
-    Button refreshClick;
+    // Variables to store the last known location
+    private double lastKnownLat;
+    private double lastKnownLon;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -60,31 +44,30 @@ public class MainActivity extends AppCompatActivity {
         latitudeTextView = findViewById(R.id.latVal);
         longitTextView = findViewById(R.id.lonVal);
         mFusedLocationClient = LocationServices.getFusedLocationProviderClient(this);
-
         refreshClick = findViewById(R.id.refreshButton);
         refreshClick.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View view) {
                 List<LocationData> locationDataList = dbHelper.getAllLocationData();
-                LocationDataAdapter adapter = new LocationDataAdapter( MainActivity.this, locationDataList); // Use MainActivity.this as the context
+                LocationDataAdapter adapter = new LocationDataAdapter(MainActivity.this, locationDataList);
                 ListView locationListView = findViewById(R.id.locationListView);
                 locationListView.setAdapter(adapter);
             }
         });
+
         // Initialize dbHelper here
         dbHelper = new LocationDatabaseHelper(this);
 
         if (checkLocationPermissions()) {
-            requestNewLocationData();
-//            startDatabaseInsertion();
             getLastLocation();
+            startLocationUpdates();
         } else {
             requestLocationPermissions();
         }
     }
 
     private boolean checkLocationPermissions() {
-        return ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED;
+        return ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED;
     }
 
     private void requestLocationPermissions() {
@@ -93,16 +76,12 @@ public class MainActivity extends AppCompatActivity {
 
     private void getLastLocation() {
         if (checkLocationPermissions()) {
-            if (ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED && ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_COARSE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
-                // TODO: Consider calling
-                //    ActivityCompat#requestPermissions
-                // here to request the missing permissions, and then overriding
-                //   public void onRequestPermissionsResult(int requestCode, String[] permissions,
-                //                                          int[] grantResults)
-                // to handle the case where the user grants the permission. See the documentation
-                // for ActivityCompat#requestPermissions for more details.
+            if (ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED
+                    && ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_COARSE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
+                // Handle permission issues
                 return;
             }
+
             mFusedLocationClient.getLastLocation().addOnCompleteListener(this, new OnCompleteListener<Location>() {
                 @Override
                 public void onComplete(Task<Location> task) {
@@ -110,57 +89,74 @@ public class MainActivity extends AppCompatActivity {
                     if (location == null) {
                         requestNewLocationData();
                     } else {
-                        latitudeTextView.setText("Latitude: " + location.getLatitude());
-                        longitTextView.setText("Longitude: " + location.getLongitude());
-                        Log.d("-------------", "===== " + location.getLatitude());
-                        Log.d("-------------", "===== " + location.getLongitude());
+                        double newLat = location.getLatitude();
+                        double newLon = location.getLongitude();
 
-                        insertLocationIntoDatabase(location.getLatitude(), location.getLongitude());
+                        double distance = calculateDistance(lastKnownLat, lastKnownLon, newLat, newLon);
 
+                        latitudeTextView.setText("Latitude: " + newLat);
+                        longitTextView.setText("Longitude: " + newLon);
+                        lastKnownLat = newLat;
+                        lastKnownLon = newLon;
+                        Log.d("-------------", "===== " + newLat);
+                        Log.d("-------------", "===== " + newLon);
+
+                        insertLocationIntoDatabase(newLat, newLon);
+
+                        // Display distance
+                        Toast.makeText(MainActivity.this, "Distance from the last known location: " + distance + " km", Toast.LENGTH_LONG).show();
                     }
                 }
             });
         }
     }
+
     private void requestNewLocationData() {
+        // Location request setup
         LocationRequest locationRequest = new LocationRequest();
         locationRequest.setPriority(LocationRequest.PRIORITY_HIGH_ACCURACY);
-        locationRequest.setInterval(5000);
-        locationRequest.setFastestInterval(1000);
-        locationRequest.setNumUpdates(1);
+        locationRequest.setInterval(5000);  // 5 seconds
+        locationRequest.setFastestInterval(1000);  // 1 second
 
-        if (ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED && ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_COARSE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
-            // TODO: Consider calling
-            //    ActivityCompat#requestPermissions
-            // here to request the missing permissions, and then overriding
-            //   public void onRequestPermissionsResult(int requestCode, String[] permissions,
-            //                                          int[] grantResults)
-            // to handle the case where the user grants the permission. See the documentation
-            // for ActivityCompat#requestPermissions for more details.
+        if (ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED
+                && ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_COARSE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
+            // Handle permission issues
             return;
         }
+
+        // Location updates
         mFusedLocationClient.requestLocationUpdates(locationRequest, new LocationCallback() {
             @Override
             public void onLocationResult(LocationResult locationResult) {
                 Location location = locationResult.getLastLocation();
-                latitudeTextView.setText(" " + location.getLatitude());
-                longitTextView.setText(" " + location.getLongitude());
+                double newLat = location.getLatitude();
+                double newLon = location.getLongitude();
 
-                Log.d("-------------", "onLocationResult: " + location.getLatitude());
-                Log.d("-------------", "onLocationResult: " + location.getLongitude());
-                insertLocationIntoDatabase(location.getLatitude(), location.getLongitude());
+                double distance = calculateDistance(lastKnownLat, lastKnownLon, newLat, newLon);
 
+                latitudeTextView.setText(" " + newLat);
+                longitTextView.setText(" " + newLon);
+                lastKnownLat = newLat;
+                lastKnownLon = newLon;
+                Log.d("-------------", "onLocationResult: " + newLat);
+                Log.d("-------------", "onLocationResult: " + newLon);
 
+                insertLocationIntoDatabase(newLat, newLon);
+
+                // Display distance
+                Toast.makeText(MainActivity.this, "Distance from the last known location: " + distance + " km", Toast.LENGTH_LONG).show();
             }
         }, null);
     }
+
     @Override
-    public void onRequestPermissionsResult(int requestCode, String[] permissions, int[] grantResults) {
+    public void onRequestPermissionsResult(int requestCode, @NonNull String[] permissions, @NonNull int[] grantResults) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults);
 
         if (requestCode == LOCATION_PERMISSION_REQUEST_CODE) {
             if (grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
                 getLastLocation();
+                startLocationUpdates();
             } else {
                 Toast.makeText(this, "Location permission denied. Please enable it in your device settings.", Toast.LENGTH_LONG).show();
             }
@@ -174,32 +170,35 @@ public class MainActivity extends AppCompatActivity {
         values.put(LocationDatabaseHelper.COLUMN_LATITUDE, latitude);
         values.put(LocationDatabaseHelper.COLUMN_LONGITUDE, longitude);
 
-        long currentTimestampMillis = System.currentTimeMillis();
-        SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault());
-        String formattedTimestamp = sdf.format(new Date(currentTimestampMillis));
-        values.put(LocationDatabaseHelper.COLUMN_TIMESTAMP, formattedTimestamp);
+        // Insert the current timestamp as text
+        String currentTimestamp = getCurrentTimestamp();
+        values.put(LocationDatabaseHelper.COLUMN_TIMESTAMP, currentTimestamp);
 
         long newRowId = db.insert(LocationDatabaseHelper.TABLE_LOCATIONS, null, values);
 
-
         if (newRowId != -1) {
             Toast.makeText(this, "Successfully saved location", Toast.LENGTH_LONG).show();
-//            startDatabaseInsertion();
         } else {
             Toast.makeText(this, "Failed to save location", Toast.LENGTH_LONG).show();
         }
 
         db.close();
     }
-    private void startDatabaseInsertion() {
-        handler.postDelayed(new Runnable() {
-            @Override
-            public void run() {
-                getLastLocation();
-                handler.postDelayed(this, 60 * 1000); // 60 seconds (1 minute)
-            }
-        }, 60 * 1000); // Initial delay of 1 minute
+
+    private String getCurrentTimestamp() {
+        SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault());
+        return sdf.format(new Date());
     }
 
+    // Calculate distance between two sets of latitude and longitude using the Haversine formula
+    private double calculateDistance(double lat1, double lon1, double lat2, double lon2) {
+        double earthRadius = 6371; // Radius of the Earth in kilometers
+        double dLat = Math.toRadians(lat2 - lat1);
+        double dLon = Math.toRadians(lon2 - lon1);
+        double a = Math.sin(dLat / 2) * Math.sin(dLat / 2)
+                + Math.cos(Math.toRadians(lat1)) * Math.cos(Math.toRadians(lat2))
+                * Math.sin(dLon / 2) * Math.sin(dLon / 2);
+        double c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+        return earthRadius * c; // Distance in kilometers
+    }
 }
-

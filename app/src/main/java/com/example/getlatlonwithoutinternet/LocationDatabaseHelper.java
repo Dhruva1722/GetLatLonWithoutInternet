@@ -1,8 +1,12 @@
 package com.example.getlatlonwithoutinternet;
 
 import android.content.Context;
+import android.database.Cursor;
 import android.database.sqlite.SQLiteDatabase;
 import android.database.sqlite.SQLiteOpenHelper;
+
+import java.util.ArrayList;
+import java.util.List;
 
 public class LocationDatabaseHelper extends SQLiteOpenHelper {
     private static final String DATABASE_NAME = "location.db";
@@ -36,5 +40,32 @@ public class LocationDatabaseHelper extends SQLiteOpenHelper {
         onCreate(db);
     }
 
-    // Add methods to insert, retrieve, and manage location data.
+    public List<LocationData> getAllLocationData() {
+        List<LocationData> locationDataList = new ArrayList<>();
+
+        SQLiteDatabase db = this.getReadableDatabase();
+        Cursor cursor = null;
+
+        try {
+            cursor = db.query(TABLE_LOCATIONS, null, null, null, null, null, null);
+
+            if (cursor != null && cursor.moveToFirst()) {
+                do {
+                    double latitude = cursor.getDouble(cursor.getColumnIndex(COLUMN_LATITUDE));
+                    double longitude = cursor.getDouble(cursor.getColumnIndex(COLUMN_LONGITUDE));
+                    String timestamp = cursor.getString(cursor.getColumnIndex(COLUMN_TIMESTAMP));
+
+                    LocationData locationData = new LocationData(latitude, longitude, timestamp);
+                    locationDataList.add(locationData);
+                } while (cursor.moveToNext());
+            }
+        } finally {
+            if (cursor != null) {
+                cursor.close();
+            }
+            db.close();
+        }
+
+        return locationDataList;
+    }
 }
