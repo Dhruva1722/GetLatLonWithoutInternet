@@ -27,4 +27,13 @@
         android:layout_toRightOf="@id/longitudeTextView"/>
 
 
+    <TextView
+        android:id="@+id/distanceTextView"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_margin="5dp"
+        android:layout_below="@id/timestampTextView"/>
+
+
+
 </RelativeLayout>

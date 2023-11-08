@@ -7,16 +7,6 @@
     tools:context=".MainActivity">
 
 
-
-
-<!--    <Button-->
-<!--        android:id="@+id/getLatLonBtn"-->
-<!--        android:layout_width="wrap_content"-->
-<!--        android:layout_height="wrap_content"-->
-<!--        android:textSize="20sp"-->
-<!--        android:text="Get Lat/Lon"-->
-<!--        android:layout_marginBottom="30dp"/>-->
-
     <Button
         android:id="@+id/refreshButton"
         android:layout_width="wrap_content"
@@ -24,8 +14,17 @@
         android:text="Refresh"
         android:layout_centerHorizontal="true"
         android:layout_marginTop="16dp"
-        android:onClick="onRefreshClick" />
+        android:onClick="onRefreshClick"
+        android:layout_toRightOf="@id/startStopButton" />
 
+
+    <Button
+        android:id="@+id/startStopButton"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="Start"
+        android:layout_marginTop="16dp"
+        android:layout_centerHorizontal="true"/>
 
     <TextView
         android:id="@+id/latVal"
@@ -49,8 +48,11 @@
     <ListView
         android:id="@+id/locationListView"
         android:layout_width="match_parent"
-        android:layout_height="500dp"
+        android:layout_height="700dp"
         android:layout_below="@id/lonVal"
-        android:layout_margin="15dp"/>
+        android:layout_marginStart="15dp"
+        android:layout_marginTop="15dp"
+        android:layout_marginEnd="15dp"
+        android:layout_marginBottom="15dp" />
 
 </RelativeLayout>

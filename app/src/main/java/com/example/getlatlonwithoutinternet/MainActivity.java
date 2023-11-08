@@ -46,9 +46,8 @@ public class MainActivity extends AppCompatActivity {
     TextView latitudeTextView, longitTextView;
     private static final int LOCATION_PERMISSION_REQUEST_CODE = 101;
     private LocationDatabaseHelper dbHelper;
-    private LocationDataAdapter locationDataAdapter;
-
-    private Handler handler = new Handler();
+    private boolean locationUpdatesActive = false;
+    private Location lastKnownLocation = null;
 
     Button refreshClick;
 
@@ -60,6 +59,21 @@ public class MainActivity extends AppCompatActivity {
         latitudeTextView = findViewById(R.id.latVal);
         longitTextView = findViewById(R.id.lonVal);
         mFusedLocationClient = LocationServices.getFusedLocationProviderClient(this);
+
+
+        Button startStopButton = findViewById(R.id.startStopButton);
+        startStopButton.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View view) {
+                if (locationUpdatesActive) {
+                    stopLocationUpdates();
+                    startStopButton.setText("Start");
+                } else {
+                    startLocationUpdates();
+                    startStopButton.setText("Stop");
+                }
+            }
+        });
 
         refreshClick = findViewById(R.id.refreshButton);
         refreshClick.setOnClickListener(new View.OnClickListener() {
@@ -73,14 +87,19 @@ public class MainActivity extends AppCompatActivity {
         });
         // Initialize dbHelper here
         dbHelper = new LocationDatabaseHelper(this);
+    }
 
+    private void startLocationUpdates() {
         if (checkLocationPermissions()) {
             requestNewLocationData();
-//            startDatabaseInsertion();
-            getLastLocation();
+            locationUpdatesActive = true;
         } else {
             requestLocationPermissions();
         }
+    }
+
+    private void stopLocationUpdates() {
+        locationUpdatesActive = false;
     }
 
     private boolean checkLocationPermissions() {
@@ -112,11 +131,10 @@ public class MainActivity extends AppCompatActivity {
                     } else {
                         latitudeTextView.setText("Latitude: " + location.getLatitude());
                         longitTextView.setText("Longitude: " + location.getLongitude());
-                        Log.d("-------------", "===== " + location.getLatitude());
-                        Log.d("-------------", "===== " + location.getLongitude());
+                        Log.d("------Last Location-------", "===== " + location.getLatitude());
+                        Log.d("------Last Location-------", "===== " + location.getLongitude());
 
                         insertLocationIntoDatabase(location.getLatitude(), location.getLongitude());
-
                     }
                 }
             });
@@ -143,14 +161,20 @@ public class MainActivity extends AppCompatActivity {
             @Override
             public void onLocationResult(LocationResult locationResult) {
                 Location location = locationResult.getLastLocation();
+
+
+                if (lastKnownLocation != null) {
+                    float distance = lastKnownLocation.distanceTo(location); // Calculate the distance
+                    Log.d("Distance", "Distance: " + distance + " meters");
+                }
+                lastKnownLocation = location;
+
                 latitudeTextView.setText(" " + location.getLatitude());
                 longitTextView.setText(" " + location.getLongitude());
 
-                Log.d("-------------", "onLocationResult: " + location.getLatitude());
-                Log.d("-------------", "onLocationResult: " + location.getLongitude());
+                Log.d("-------New location------", "onLocationResult: " + location.getLatitude());
+                Log.d("-------New location------", "onLocationResult: " + location.getLongitude());
                 insertLocationIntoDatabase(location.getLatitude(), location.getLongitude());
-
-
             }
         }, null);
     }
@@ -179,27 +203,58 @@ public class MainActivity extends AppCompatActivity {
         String formattedTimestamp = sdf.format(new Date(currentTimestampMillis));
         values.put(LocationDatabaseHelper.COLUMN_TIMESTAMP, formattedTimestamp);
 
-        long newRowId = db.insert(LocationDatabaseHelper.TABLE_LOCATIONS, null, values);
+        // Calculate the distance between last known location and the new location
+        if (lastKnownLocation != null) {
+            Location newLocation = new Location("newLocation");
+            newLocation.setLatitude(latitude);
+            newLocation.setLongitude(longitude);
+            float distance = lastKnownLocation.distanceTo(newLocation);
+            values.put(LocationDatabaseHelper.COLUMN_DISTANCE, distance);
+        } else {
+            values.put(LocationDatabaseHelper.COLUMN_DISTANCE, 0.0); // Default value if lastKnownLocation is null
+        }
 
+        long newRowId = db.insert(LocationDatabaseHelper.TABLE_LOCATIONS, null, values);
 
         if (newRowId != -1) {
             Toast.makeText(this, "Successfully saved location", Toast.LENGTH_LONG).show();
-//            startDatabaseInsertion();
         } else {
             Toast.makeText(this, "Failed to save location", Toast.LENGTH_LONG).show();
         }
 
         db.close();
     }
-    private void startDatabaseInsertion() {
-        handler.postDelayed(new Runnable() {
-            @Override
-            public void run() {
-                getLastLocation();
-                handler.postDelayed(this, 60 * 1000); // 60 seconds (1 minute)
-            }
-        }, 60 * 1000); // Initial delay of 1 minute
-    }
-
 }
 
+
+//        if (checkLocationPermissions()) {
+//            requestNewLocationData();
+//
+//        } else {
+//            getLastLocation();
+//            requestLocationPermissions();
+//        }
+
+
+
+//    private void insertLocationIntoDatabase(double latitude, double longitude) {
+//        SQLiteDatabase db = dbHelper.getWritableDatabase();
+//
+//        ContentValues values = new ContentValues();
+//        values.put(LocationDatabaseHelper.COLUMN_LATITUDE, latitude);
+//        values.put(LocationDatabaseHelper.COLUMN_LONGITUDE, longitude);
+//
+//        long currentTimestampMillis = System.currentTimeMillis();
+//        SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault());
+//        String formattedTimestamp = sdf.format(new Date(currentTimestampMillis));
+//        values.put(LocationDatabaseHelper.COLUMN_TIMESTAMP, formattedTimestamp);
+//
+//        long newRowId = db.insert(LocationDatabaseHelper.TABLE_LOCATIONS, null, values);
+//
+//        if (newRowId != -1) {
+//            Toast.makeText(this, "Successfully saved location", Toast.LENGTH_LONG).show();
+//        } else {
+//            Toast.makeText(this, "Failed to save location", Toast.LENGTH_LONG).show();
+//        }
+//        db.close();
+//    }
