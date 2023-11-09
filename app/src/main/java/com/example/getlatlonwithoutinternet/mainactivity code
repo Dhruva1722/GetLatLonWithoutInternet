@@ -50,9 +50,6 @@ public class MainActivity extends AppCompatActivity {
     private Location lastKnownLocation = null;
 
     Button refreshClick;
-    private Handler updateHandler;
-    private static final int LOCATION_UPDATE_INTERVAL = 5000; // 5 seconds
-
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -62,6 +59,7 @@ public class MainActivity extends AppCompatActivity {
         latitudeTextView = findViewById(R.id.latVal);
         longitTextView = findViewById(R.id.lonVal);
         mFusedLocationClient = LocationServices.getFusedLocationProviderClient(this);
+
 
         Button startStopButton = findViewById(R.id.startStopButton);
         startStopButton.setOnClickListener(new View.OnClickListener() {
@@ -82,21 +80,19 @@ public class MainActivity extends AppCompatActivity {
             @Override
             public void onClick(View view) {
                 List<LocationData> locationDataList = dbHelper.getAllLocationData();
-                LocationDataAdapter adapter = new LocationDataAdapter(MainActivity.this, locationDataList);
+                LocationDataAdapter adapter = new LocationDataAdapter( MainActivity.this, locationDataList); // Use MainActivity.this as the context
                 ListView locationListView = findViewById(R.id.locationListView);
                 locationListView.setAdapter(adapter);
             }
         });
-
         // Initialize dbHelper here
         dbHelper = new LocationDatabaseHelper(this);
-        updateHandler = new Handler();
     }
 
     private void startLocationUpdates() {
         if (checkLocationPermissions()) {
+            requestNewLocationData();
             locationUpdatesActive = true;
-            startLocationUpdateTask(); // Start the periodic location update task
         } else {
             requestLocationPermissions();
         }
@@ -104,36 +100,26 @@ public class MainActivity extends AppCompatActivity {
 
     private void stopLocationUpdates() {
         locationUpdatesActive = false;
-        stopLocationUpdateTask(); // Stop the periodic location update task
-    }
-
-    private void startLocationUpdateTask() {
-        updateHandler.postDelayed(new Runnable() {
-            @Override
-            public void run() {
-                if (locationUpdatesActive) {
-                    requestNewLocationData();
-                    startLocationUpdateTask(); // Schedule the next location update
-                }
-            }
-        }, LOCATION_UPDATE_INTERVAL);
-    }
-
-    private void stopLocationUpdateTask() {
-        updateHandler.removeCallbacksAndMessages(null);
     }
 
     private boolean checkLocationPermissions() {
-        return ActivityCompat.checkSelfPermission(this, android.Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED;
+        return ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED;
     }
 
     private void requestLocationPermissions() {
-        ActivityCompat.requestPermissions(this, new String[]{android.Manifest.permission.ACCESS_FINE_LOCATION}, LOCATION_PERMISSION_REQUEST_CODE);
+        ActivityCompat.requestPermissions(this, new String[]{Manifest.permission.ACCESS_FINE_LOCATION}, LOCATION_PERMISSION_REQUEST_CODE);
     }
 
     private void getLastLocation() {
         if (checkLocationPermissions()) {
-            if (ActivityCompat.checkSelfPermission(this, android.Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED && ActivityCompat.checkSelfPermission(this, android.Manifest.permission.ACCESS_COARSE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
+            if (ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED && ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_COARSE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
+                // TODO: Consider calling
+                //    ActivityCompat#requestPermissions
+                // here to request the missing permissions, and then overriding
+                //   public void onRequestPermissionsResult(int requestCode, String[] permissions,
+                //                                          int[] grantResults)
+                // to handle the case where the user grants the permission. See the documentation
+                // for ActivityCompat#requestPermissions for more details.
                 return;
             }
             mFusedLocationClient.getLastLocation().addOnCompleteListener(this, new OnCompleteListener<Location>() {
@@ -145,13 +131,15 @@ public class MainActivity extends AppCompatActivity {
                     } else {
                         latitudeTextView.setText("Latitude: " + location.getLatitude());
                         longitTextView.setText("Longitude: " + location.getLongitude());
+                        Log.d("------Last Location-------", "===== " + location.getLatitude());
+                        Log.d("------Last Location-------", "===== " + location.getLongitude());
+
                         insertLocationIntoDatabase(location.getLatitude(), location.getLongitude());
                     }
                 }
             });
         }
     }
-
     private void requestNewLocationData() {
         LocationRequest locationRequest = new LocationRequest();
         locationRequest.setPriority(LocationRequest.PRIORITY_HIGH_ACCURACY);
@@ -159,25 +147,37 @@ public class MainActivity extends AppCompatActivity {
         locationRequest.setFastestInterval(1000);
         locationRequest.setNumUpdates(1);
 
-        if (ActivityCompat.checkSelfPermission(this, android.Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED && ActivityCompat.checkSelfPermission(this, android.Manifest.permission.ACCESS_COARSE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
+        if (ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED && ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_COARSE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
+            // TODO: Consider calling
+            //    ActivityCompat#requestPermissions
+            // here to request the missing permissions, and then overriding
+            //   public void onRequestPermissionsResult(int requestCode, String[] permissions,
+            //                                          int[] grantResults)
+            // to handle the case where the user grants the permission. See the documentation
+            // for ActivityCompat#requestPermissions for more details.
             return;
         }
         mFusedLocationClient.requestLocationUpdates(locationRequest, new LocationCallback() {
             @Override
             public void onLocationResult(LocationResult locationResult) {
                 Location location = locationResult.getLastLocation();
+
+
                 if (lastKnownLocation != null) {
                     float distance = lastKnownLocation.distanceTo(location); // Calculate the distance
-                    lastKnownLocation = location;
                     Log.d("Distance", "Distance: " + distance + " meters");
                 }
+                lastKnownLocation = location;
+
                 latitudeTextView.setText(" " + location.getLatitude());
                 longitTextView.setText(" " + location.getLongitude());
+
+                Log.d("-------New location------", "onLocationResult: " + location.getLatitude());
+                Log.d("-------New location------", "onLocationResult: " + location.getLongitude());
                 insertLocationIntoDatabase(location.getLatitude(), location.getLongitude());
             }
         }, null);
     }
-
     @Override
     public void onRequestPermissionsResult(int requestCode, String[] permissions, int[] grantResults) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults);
@@ -203,6 +203,7 @@ public class MainActivity extends AppCompatActivity {
         String formattedTimestamp = sdf.format(new Date(currentTimestampMillis));
         values.put(LocationDatabaseHelper.COLUMN_TIMESTAMP, formattedTimestamp);
 
+        // Calculate the distance between last known location and the new location
         if (lastKnownLocation != null) {
             Location newLocation = new Location("newLocation");
             newLocation.setLatitude(latitude);
@@ -210,7 +211,7 @@ public class MainActivity extends AppCompatActivity {
             float distance = lastKnownLocation.distanceTo(newLocation);
             values.put(LocationDatabaseHelper.COLUMN_DISTANCE, distance);
         } else {
-            values.put(LocationDatabaseHelper.COLUMN_DISTANCE, 0.0);
+            values.put(LocationDatabaseHelper.COLUMN_DISTANCE, 0.0); // Default value if lastKnownLocation is null
         }
 
         long newRowId = db.insert(LocationDatabaseHelper.TABLE_LOCATIONS, null, values);
@@ -224,36 +225,3 @@ public class MainActivity extends AppCompatActivity {
         db.close();
     }
 }
-
-
-//        if (checkLocationPermissions()) {
-//            requestNewLocationData();
-//
-//        } else {
-//            getLastLocation();
-//            requestLocationPermissions();
-//        }
-
-
-
-//    private void insertLocationIntoDatabase(double latitude, double longitude) {
-//        SQLiteDatabase db = dbHelper.getWritableDatabase();
-//
-//        ContentValues values = new ContentValues();
-//        values.put(LocationDatabaseHelper.COLUMN_LATITUDE, latitude);
-//        values.put(LocationDatabaseHelper.COLUMN_LONGITUDE, longitude);
-//
-//        long currentTimestampMillis = System.currentTimeMillis();
-//        SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault());
-//        String formattedTimestamp = sdf.format(new Date(currentTimestampMillis));
-//        values.put(LocationDatabaseHelper.COLUMN_TIMESTAMP, formattedTimestamp);
-//
-//        long newRowId = db.insert(LocationDatabaseHelper.TABLE_LOCATIONS, null, values);
-//
-//        if (newRowId != -1) {
-//            Toast.makeText(this, "Successfully saved location", Toast.LENGTH_LONG).show();
-//        } else {
-//            Toast.makeText(this, "Failed to save location", Toast.LENGTH_LONG).show();
-//        }
-//        db.close();
-//    }
